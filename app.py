@@ -5,9 +5,10 @@ Streamlit app for product segmentation using KMeans clustering model.
 import streamlit as st
 import pandas as pd
 import pickle
+import plotly.express as px
 from sklearn.decomposition import PCA
+from sklearn.metrics import silhouette_score
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 REQUIRED_FEATURES = ["Avg_Purchase_Frequency", "Avg_Basket_Size", "Avg_Spend_Per_Purchase", "Return_Rate", "Discount_Availability"]
 
@@ -38,22 +39,40 @@ def run_prediction(df, model, scaler):
     scaled = scaler.transform(features)
     df["Cluster"] = model.predict(scaled)
 
+    # PCA for visualization
     pca = PCA(n_components=2)
     components = pca.fit_transform(scaled)
     df["PCA1"], df["PCA2"] = components[:, 0], components[:, 1]
-    return df
 
-def plot_clusters(df):
-    fig, ax = plt.subplots()
-    sns.scatterplot(data=df, x="PCA1", y="PCA2", hue="Cluster", palette="Set2", s=100, ax=ax)
-    ax.set_title("Product Clusters")
-    st.pyplot(fig)
+    # Silhouette Score
+    score = silhouette_score(scaled, df["Cluster"])
+    return df, score
+
+def plot_clusters_interactive(df):
+    fig = px.scatter(
+        df, x="PCA1", y="PCA2", color="Cluster",
+        hover_data=["ProductID", "Avg_Purchase_Frequency", "Avg_Basket_Size", "Avg_Spend_Per_Purchase", "Return_Rate", "Discount_Availability"],
+        title="📊 Product Clusters (Interactive View)"
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+def show_cluster_summary(df):
+    st.subheader("📋 Cluster Profile Summary")
+    summary = df.groupby("Cluster").agg({
+        "Avg_Purchase_Frequency": "mean",
+        "Avg_Basket_Size": "mean",
+        "Avg_Spend_Per_Purchase": "mean",
+        "Return_Rate": "mean",
+        "Discount_Availability": "mean",
+        "Cluster": "count"
+    }).rename(columns={"Cluster": "Product_Count"})
+    st.dataframe(summary.style.format("{:.2f}"))
 
 def main():
-    uploaded_file = st.file_uploader("Upload product data (.csv)", type=["csv"])
+    uploaded_file = st.file_uploader("📤 Upload Product Data (.csv)", type=["csv"])
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
-        st.subheader("Uploaded Data")
+        st.subheader("📄 Uploaded Data Preview")
         st.write(df.head())
 
         if not validate_data(df):
@@ -61,14 +80,19 @@ def main():
 
         model, scaler = load_model()
         if model and scaler:
-            df = run_prediction(df, model, scaler)
-            st.subheader("Clustered Data")
+            df, score = run_prediction(df, model, scaler)
+
+            st.subheader("✅ Clustered Data Preview")
             st.dataframe(df.head())
 
-            plot_clusters(df)
+            st.subheader("📈 Silhouette Score")
+            st.metric("Score", f"{score:.3f}", help="Closer to 1 = better clustering")
 
-            csv = df.to_csv(index=False).encode('utf-8')
-            st.download_button("Download Result as CSV", csv, "segmented_products.csv", "text/csv")
+            plot_clusters_interactive(df)
+            show_cluster_summary(df)
+
+            csv = df.to_csv(index=False).encode("utf-8")
+            st.download_button("⬇️ Download Clustered Data", csv, "segmented_products.csv", "text/csv")
 
 if __name__ == "__main__":
     main()
