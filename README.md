@@ -1,7 +1,5 @@
 
 ---
-
-````markdown
 # 🛍️ Product Segmentation with KMeans Clustering
 
 ![Python](https://img.shields.io/badge/Python-3.9%2B-blue)
